@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name         Google Gemini Tab Renamer, Status & Model Enforcer
+// @name         Google Gemini Tab Renamer & Status Spinner
 // @namespace    https://spacebarlabs.com/
-// @version      4.0
-// @description  Sets title, spins favicon, and enforces "Fast" model on Enter (Ctrl+Alt+Enter for Thinking).
+// @version      4.1
+// @description  Sets the browser tab title to the chat title and spins the favicon when Gemini is generating a response.
 // @author       Benjamin Oakes
 // @license      GPLv3
 // @match        https://gemini.google.com/*
@@ -22,12 +22,6 @@
         // Timeouts
         timeUntilQuestion: 30000,
         timeUntilGiveUp: 120000,
-
-        // Selectors (These are heuristic and might need updates if Google changes UI)
-        modelSelectorBtn: 'button[aria-haspopup="menu"]', // The button that shows current model
-        sendButton: 'button[aria-label*="Send"]',         // The arrow button to submit chat
-        thinkingText: "Thinking",                          // Text to identify Thinking model
-        fastText: "Flash"                                  // Text to identify Fast model (fallback)
     };
 
     // --- STATE MANAGEMENT ---
@@ -37,132 +31,14 @@
     let lastInteractionTime = 0;
     const INTERACTION_WINDOW = 5000;
 
-    // --- UTILS ---
-    const delay = ms => new Promise(res => setTimeout(res, ms));
-
-    function showToast(message) {
-        const toast = document.createElement('div');
-        toast.textContent = message;
-        Object.assign(toast.style, {
-            position: 'fixed', bottom: '100px', left: '50%', transform: 'translateX(-50%)',
-            backgroundColor: '#333', color: '#fff', padding: '10px 20px', borderRadius: '5px',
-            zIndex: '9999', fontSize: '14px', boxShadow: '0 4px 6px rgba(0,0,0,0.1)',
-            opacity: '0', transition: 'opacity 0.3s'
-        });
-        document.body.appendChild(toast);
-        // Animate in/out
-        requestAnimationFrame(() => toast.style.opacity = '1');
-        setTimeout(() => {
-            toast.style.opacity = '0';
-            setTimeout(() => toast.remove(), 300);
-        }, 2000);
-    }
-
-    // --- MODEL ENFORCER LOGIC ---
-    async function enforceModelAndSubmit(targetMode) {
-        // targetMode: 'fast' or 'thinking'
-
-        // 1. Find the Model Selector Button
-        // We look for a button usually at the top left/center that indicates the model
-        const buttons = Array.from(document.querySelectorAll('button'));
-        const modelBtn = buttons.find(b => b.hasAttribute('aria-haspopup') && (b.innerText.includes('Gemini') || b.innerText.includes('1.5') || b.innerText.includes('2.0')));
-
-        if (!modelBtn) {
-            console.warn("Gemini Userscript: Could not find model selector. Submitting as is.");
-            clickSend();
-            return;
-        }
-
-        const currentText = modelBtn.innerText || "";
-        const isCurrentlyThinking = currentText.includes(CONFIG.thinkingText);
-
-        // 2. Check if we need to switch
-        let needsSwitch = false;
-        if (targetMode === 'fast' && isCurrentlyThinking) needsSwitch = true;
-        if (targetMode === 'thinking' && !isCurrentlyThinking) needsSwitch = true;
-
-        if (needsSwitch) {
-            showToast(targetMode === 'fast' ? "⚡ Switching to Fast..." : "🧠 Switching to Thinking...");
-
-            // Click to open menu
-            modelBtn.click();
-            await delay(150); // Wait for menu animation
-
-            // Find the option in the menu
-            // Menu items are usually role="menuitem"
-            const menuItems = Array.from(document.querySelectorAll('[role="menuitem"], [role="option"]'));
-
-            let targetItem;
-            if (targetMode === 'thinking') {
-                targetItem = menuItems.find(el => el.innerText.includes(CONFIG.thinkingText));
-            } else {
-                // For fast, find the one that DOESN'T say Thinking, or says Flash/Pro
-                targetItem = menuItems.find(el => !el.innerText.includes(CONFIG.thinkingText) && (el.innerText.includes('Flash') || el.innerText.includes('Pro') || el.innerText.includes('Gemini')));
-            }
-
-            if (targetItem) {
-                targetItem.click();
-                await delay(200); // Wait for UI to update
-            } else {
-                console.warn("Gemini Userscript: Could not find target model option.");
-            }
-        }
-
-        // 3. Submit
-        clickSend();
-    }
-
-    function clickSend() {
-        const sendBtn = document.querySelector(CONFIG.sendButton) || document.querySelector('button[aria-label="Send message"]');
-        if (sendBtn && !sendBtn.disabled) {
-            sendBtn.click();
-        }
-    }
-
-    // --- KEYBOARD INTERCEPTION ---
-    window.addEventListener('keydown', (e) => {
-        // Only trigger inside the prompt text area
-        const target = e.target;
-        const isInput = target.matches('div[contenteditable="true"]') || target.matches('textarea') || target.closest('.input-area');
-
-        if (!isInput) return;
-        if (e.key !== 'Enter') return;
-
-        // Ignore if shift is held (multiline)
-        if (e.shiftKey) return;
-
-        // Check for Auto-Complete selection (DOM specific check might be needed, but usually Enter acts natively here)
-        // If the autocomplete dropdown is visible, we might want to let default happen.
-        // For now, we assume if the user hits Enter, they want to send.
-
-        // LOGIC:
-        // Ctrl+Alt+Enter = Force Thinking
-        // Enter = Force Fast
-
-        if (e.ctrlKey && e.altKey) {
-            e.preventDefault();
-            e.stopPropagation();
-            enforceModelAndSubmit('thinking');
-        } else {
-            // Standard Enter
-            // We need to stop the default immediate send, check model, then send.
-            // Note: This adds a tiny delay to every message, but ensures safety.
-            e.preventDefault();
-            e.stopPropagation();
-            enforceModelAndSubmit('fast');
-        }
-
-    }, { capture: true }); // Capture phase to prevent Gemini's default handlers
-
-
-    // --- STATUS & SPINNER LOGIC (Original Functionality) ---
+    // --- STATUS & SPINNER LOGIC ---
 
     function recordInteraction() { lastInteractionTime = Date.now(); }
     ['keydown', 'mousedown', 'touchstart', 'submit'].forEach(evt => {
         window.addEventListener(evt, recordInteraction, { capture: true, passive: true });
     });
 
-    // Network Interception
+    // Network Interception (Fetch)
     const originalFetch = window.fetch;
     window.fetch = async function(input, init) {
         const url = (typeof input === 'string') ? input : (input?.url || '');
@@ -192,7 +68,7 @@
         }
     };
 
-    // XHR Interception
+    // Network Interception (XHR)
     const originalOpen = XMLHttpRequest.prototype.open;
     const originalSend = XMLHttpRequest.prototype.send;
     XMLHttpRequest.prototype.open = function(method, url) {
