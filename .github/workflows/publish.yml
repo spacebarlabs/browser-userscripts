@@ -28,7 +28,7 @@ jobs:
               # Add @updateURL after the first ==UserScript== line
               # The update URL points to the GitHub Pages location
               awk -v url="https://browser-userscripts.spacebarlabs.com/$script" '
-                /^\/\/ ==UserScript==/ {
+                /^[[:space:]]*\/\/[[:space:]]*==UserScript==[[:space:]]*$/ {
                   print $0
                   print "// @updateURL       " url
                   next
