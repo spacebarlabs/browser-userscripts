@@ -19,12 +19,33 @@ jobs:
         run: |
           mkdir -p _site
           
-          # 1. Create the Zip Archive of all scripts
+          # 1. Process userscripts and add @updateURL
+          echo "🔧 Processing userscripts and adding @updateURL..."
+          shopt -s nullglob
+          for script in *.user.js; do
+            if [ -f "$script" ]; then
+              echo "Processing $script..."
+              # Add @updateURL after the first ==UserScript== line
+              # The update URL points to the GitHub Pages location
+              awk -v url="https://browser-userscripts.spacebarlabs.com/$script" '
+                /^\/\/ ==UserScript==/ {
+                  print $0
+                  print "// @updateURL       " url
+                  next
+                }
+                { print }
+              ' "$script" > "_site/$script"
+            fi
+          done
+          
+          # 2. Create the Zip Archive of all processed scripts
           # We use || true to prevent failure if no scripts exist yet
           echo "📦 Zipping scripts..."
-          zip -r _site/all-scripts.zip *.user.js 2>/dev/null || echo "No .user.js files found to zip yet."
+          cd _site
+          zip -r all-scripts.zip *.user.js 2>/dev/null || echo "No .user.js files found to zip yet."
+          cd ..
           
-          # 2. Start the HTML file
+          # 3. Start the HTML file
           cat <<HTML > _site/index.html
           <!DOCTYPE html>
           <html lang="en">
@@ -50,27 +71,28 @@ jobs:
             <div id="script-list">
           HTML
 
-          # 3. Loop through scripts and append to HTML
+          # 4. Loop through processed scripts in _site and append to HTML
           shopt -s nullglob
-          for script in *.user.js; do
+          for script in _site/*.user.js; do
+            script_basename=$(basename "$script")
             NAME=$(grep -m 1 "@name " "$script" | sed 's/.*@name\s*//')
             DESC=$(grep -m 1 "@description " "$script" | sed 's/.*@description\s*//')
-            if [ -z "$NAME" ]; then NAME="$script"; fi
+            if [ -z "$NAME" ]; then NAME="$script_basename"; fi
             
-            echo "Processing: $NAME"
+            echo "Generating HTML for: $NAME"
             
             cat <<BLOCK >> _site/index.html
             <div class="script-card">
               <h3>$NAME</h3>
               <p>$DESC</p>
-              <div class="meta">Filename: $script</div>
+              <div class="meta">Filename: $script_basename</div>
               <br>
-              <a href="https://github.com/${{ github.repository }}/raw/main/$script" class="btn">Install Script</a>
+              <a href="$script_basename" class="btn">Install Script</a>
             </div>
           BLOCK
           done
 
-          # 4. Close HTML
+          # 5. Close HTML
           cat <<HTML >> _site/index.html
             </div>
             <p style="margin-top: 3rem; color: #999; font-size: 0.8rem;">Generated automatically by GitHub Actions.</p>
@@ -78,7 +100,7 @@ jobs:
           </html>
           HTML
           
-          # 5. Handle Custom Domain (CNAME)
+          # 6. Handle Custom Domain (CNAME)
           # Since you have a custom domain configured in your screenshot, we must preserve it.
           if [ -f CNAME ]; then
             cp CNAME _site/CNAME
