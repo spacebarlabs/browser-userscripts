@@ -1,4 +1,4 @@
-name: Build and Deploy Userscripts
+name: Build and Deploy to gh-pages
 
 on:
   push:
@@ -6,16 +6,10 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
-  pages: write
-  id-token: write
-
-concurrency:
-  group: "pages"
-  cancel-in-progress: true
+  contents: write  # Required to push to the gh-pages branch
 
 jobs:
-  build:
+  build-and-deploy:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -25,7 +19,7 @@ jobs:
         run: |
           mkdir -p _site
           
-          # 1. Create the Zip Archive of all scripts (if any exist)
+          # 1. Create the Zip Archive of all scripts
           # We use || true to prevent failure if no scripts exist yet
           echo "📦 Zipping scripts..."
           zip -r _site/all-scripts.zip *.user.js 2>/dev/null || echo "No .user.js files found to zip yet."
@@ -57,19 +51,14 @@ jobs:
           HTML
 
           # 3. Loop through scripts and append to HTML
-          # The nullglob option ensures the loop doesn't run if no files match
           shopt -s nullglob
           for script in *.user.js; do
-            # Extract metadata safely
             NAME=$(grep -m 1 "@name " "$script" | sed 's/.*@name\s*//')
             DESC=$(grep -m 1 "@description " "$script" | sed 's/.*@description\s*//')
-            
-            # Default to filename if Name is missing
             if [ -z "$NAME" ]; then NAME="$script"; fi
             
             echo "Processing: $NAME"
             
-            # Append HTML block
             cat <<BLOCK >> _site/index.html
             <div class="script-card">
               <h3>$NAME</h3>
@@ -88,19 +77,18 @@ jobs:
           </body>
           </html>
           HTML
+          
+          # 5. Handle Custom Domain (CNAME)
+          # Since you have a custom domain configured in your screenshot, we must preserve it.
+          if [ -f CNAME ]; then
+            cp CNAME _site/CNAME
+          elif [ -n "${{ vars.CNAME_DOMAIN }}" ]; then 
+            # Optional: if you set a repository variable CNAME_DOMAIN
+            echo "${{ vars.CNAME_DOMAIN }}" > _site/CNAME
+          fi
 
-      - name: Upload artifact
-        uses: actions/upload-pages-artifact@v3
+      - name: Deploy to gh-pages branch
+        uses: JamesIves/github-pages-deploy-action@v4
         with:
-          path: "_site"
-
-  deploy:
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    runs-on: ubuntu-latest
-    needs: build
-    steps:
-      - name: Deploy to GitHub Pages
-        id: deployment
-        uses: actions/deploy-pages@v4
+          branch: gh-pages 
+          folder: _site
