@@ -1,0 +1,106 @@
+name: Build and Deploy Userscripts
+
+on:
+  push:
+    branches: ["main"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: "pages"
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Generate Site and Zip
+        run: |
+          mkdir -p _site
+          
+          # 1. Create the Zip Archive of all scripts (if any exist)
+          # We use || true to prevent failure if no scripts exist yet
+          echo "📦 Zipping scripts..."
+          zip -r _site/all-scripts.zip *.user.js 2>/dev/null || echo "No .user.js files found to zip yet."
+          
+          # 2. Start the HTML file
+          cat <<HTML > _site/index.html
+          <!DOCTYPE html>
+          <html lang="en">
+          <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>Spacebar Labs Userscripts</title>
+            <style>
+              body { font-family: -apple-system, system-ui, sans-serif; max-width: 800px; margin: 2rem auto; padding: 0 1rem; line-height: 1.6; }
+              h1 { border-bottom: 2px solid #eee; padding-bottom: 0.5rem; }
+              .script-card { border: 1px solid #ddd; padding: 1rem; border-radius: 8px; margin-bottom: 1rem; background: #fafafa; }
+              .script-card:hover { border-color: #bbb; }
+              .btn { display: inline-block; background: #2da44e; color: white; padding: 0.5rem 1rem; text-decoration: none; border-radius: 6px; font-weight: bold; }
+              .btn:hover { background: #2c974b; }
+              .meta { font-size: 0.9em; color: #666; margin-top: 0.5rem; }
+              .download-all { display: block; background: #eee; text-align: center; padding: 1rem; border-radius: 8px; margin-bottom: 2rem; color: #333; text-decoration: none; font-weight: bold; border: 1px solid #ddd; }
+              .download-all:hover { background: #e3e3e3; }
+            </style>
+          </head>
+          <body>
+            <h1>Browser Userscripts</h1>
+            <a href="all-scripts.zip" class="download-all">⬇️ Download All Scripts (.zip)</a>
+            <div id="script-list">
+          HTML
+
+          # 3. Loop through scripts and append to HTML
+          # The nullglob option ensures the loop doesn't run if no files match
+          shopt -s nullglob
+          for script in *.user.js; do
+            # Extract metadata safely
+            NAME=$(grep -m 1 "@name " "$script" | sed 's/.*@name\s*//')
+            DESC=$(grep -m 1 "@description " "$script" | sed 's/.*@description\s*//')
+            
+            # Default to filename if Name is missing
+            if [ -z "$NAME" ]; then NAME="$script"; fi
+            
+            echo "Processing: $NAME"
+            
+            # Append HTML block
+            cat <<BLOCK >> _site/index.html
+            <div class="script-card">
+              <h3>$NAME</h3>
+              <p>$DESC</p>
+              <div class="meta">Filename: $script</div>
+              <br>
+              <a href="https://github.com/${{ github.repository }}/raw/main/$script" class="btn">Install Script</a>
+            </div>
+          BLOCK
+          done
+
+          # 4. Close HTML
+          cat <<HTML >> _site/index.html
+            </div>
+            <p style="margin-top: 3rem; color: #999; font-size: 0.8rem;">Generated automatically by GitHub Actions.</p>
+          </body>
+          </html>
+          HTML
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: "_site"
+
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
