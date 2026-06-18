@@ -1,5 +1,7 @@
 # Browser Userscripts
 
+[![Sponsored by CloudBreak](https://cloudbreak.app/promotional_banner.svg?source=browser_userscripts_readme)](https://cloudbreak.app/promotional_banner/visit?source=browser_userscripts_readme)
+
 A collection of Tampermonkey/Greasemonkey scripts managed via Git.
 
 ## Installation
