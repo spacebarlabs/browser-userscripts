@@ -2,7 +2,7 @@
 // @name         Campfire Chat - enter submits message on hybrid laptop
 // @namespace    http://tampermonkey.net/
 // @version      2026-07-07
-// @description  try to take over the world!
+// @description  Fix message sending behavior on laptops that have touchscreens
 // @author       You
 // @match        *://*/*
 // @grant        none
