@@ -7,6 +7,8 @@ A collection of Tampermonkey/Greasemonkey scripts managed via Git.
 ## Installation
 Visit the [Installation Page](https://browser-userscripts.spacebarlabs.com/) to install scripts one by one or download a bulk .zip archive.
 
+First install a userscript manager extension for your browser, such as Tampermonkey, Violentmonkey, or Greasemonkey. Then visit the Installation Page, choose a script, click **Install Script**, and confirm the installation in your userscript manager.
+
 ## How to add a new script
 1. Add your `*.user.js` file to the root of this repository.
 2. Commit and push.
