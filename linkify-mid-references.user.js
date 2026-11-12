@@ -3,7 +3,8 @@
 // @namespace   https://spacebarlabs.com/
 // @description Makes mid (email Message ID) links clickable when found in text
 // @match       http://localhost:5000/*
-// @include     /^https:\/\/fava\.[^/]+\/.*/
+// @match       http://127.0.0.1:5000/*
+// @include     /^https?:\/\/fava\.[^/]+\/.*/
 // @grant       none
 // ==/UserScript==
 
